@@ -1,0 +1,14 @@
+
+    private TimerTask deadMansSwitch = new TimerTask() {
+        @Override
+        public void run() {
+            extendLock();
+        }
+    };
+
+    private Timer timer = new Timer();
+
+
+    private synchronized void extendLock() {
+        throw new NotImplementedException(NOT_IMPLEMENTED_MESSAGE);
+    }
