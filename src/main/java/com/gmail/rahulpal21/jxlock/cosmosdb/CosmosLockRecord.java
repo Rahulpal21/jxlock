@@ -8,6 +8,7 @@ import java.util.Date;
 public class CosmosLockRecord {
     private String id;
     private String lock_name;
+    private long owner;
     private Boolean isAquired;
     private Date createdAt;
     private Date lastUpdatedAt;

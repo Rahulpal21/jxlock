@@ -2,7 +2,6 @@ package com.gmail.rahulpal21.jxlock.cosmosdb;
 
 import com.azure.cosmos.ConsistencyLevel;
 import com.azure.cosmos.CosmosContainer;
-import com.azure.cosmos.implementation.NotFoundException;
 import com.azure.cosmos.implementation.apachecommons.lang.NotImplementedException;
 import com.azure.cosmos.models.*;
 import com.gmail.rahulpal21.jxlock.DistributedLock;
@@ -11,8 +10,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.Optional;
-import java.util.Timer;
-import java.util.TimerTask;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.Condition;
 
@@ -22,6 +19,7 @@ public class CosmosDBDistributedLock extends DistributedLock {
     private CosmosContainer container;
     private CosmosLockRecord lockRecord;
     private String uniqueName;
+    private Long pid;
 
     private static CosmosItemRequestOptions readRequestOptions = new CosmosItemRequestOptions().setConsistencyLevel(ConsistencyLevel.STRONG);
     private static CosmosItemRequestOptions createRequestOptions = new CosmosItemRequestOptions().setConsistencyLevel(ConsistencyLevel.STRONG);
@@ -30,6 +28,7 @@ public class CosmosDBDistributedLock extends DistributedLock {
         super();
         this.container = container;
         this.uniqueName = uniqueName;
+        this.pid = ProcessHandle.current().pid();
         init();
     }
 
@@ -41,7 +40,9 @@ public class CosmosDBDistributedLock extends DistributedLock {
             record.setLock_name(uniqueName);
             record.setIsAquired(false);
             record.setId(Guid.GUID.newGuid().toGuidString());
-            lockRecord = container.createItem(record).getItem();
+            record.setOwner(pid);
+            container.createItem(record, createRequestOptions);
+            lockRecord = container.readItem(record.getId(), new PartitionKey(record.getLock_name()), readRequestOptions, CosmosLockRecord.class).getItem();
         } else {
             lockRecord = response.get();
         }
@@ -54,8 +55,9 @@ public class CosmosDBDistributedLock extends DistributedLock {
             LOGGER.info("lock {} is already aquired", lockRecord.getLock_name());
             return;
         }
-        CosmosPatchOperations patchOperations = CosmosPatchOperations.create().set("/isAquired", true);
-        lockRecord = container.patchItem(lockRecord.getId(), new PartitionKey(lockRecord.getLock_name()), patchOperations, getCosmosPatchItemRequestOptions(lockRecord.get_etag()), CosmosLockRecord.class).getItem();
+        CosmosPatchOperations patchOperations = CosmosPatchOperations.create().set("/isAquired", true).set("/owner", pid);
+        container.patchItem(lockRecord.getId(), new PartitionKey(lockRecord.getLock_name()), patchOperations, getCosmosPatchItemRequestOptions(lockRecord.get_etag()), CosmosLockRecord.class);
+        lockRecord = container.readItem(lockRecord.getId(), new PartitionKey(lockRecord.getLock_name()), readRequestOptions, CosmosLockRecord.class).getItem();
     }
 
     private CosmosPatchItemRequestOptions getCosmosPatchItemRequestOptions(String etag) {
@@ -83,8 +85,12 @@ public class CosmosDBDistributedLock extends DistributedLock {
     @Override
     public synchronized void unlock() {
         lockRecord = container.readItem(lockRecord.getId(), new PartitionKey(lockRecord.getLock_name()), readRequestOptions, CosmosLockRecord.class).getItem();
-        CosmosPatchOperations patchOperations = CosmosPatchOperations.create().set("/isAquired", false);
-        lockRecord = container.patchItem(lockRecord.getId(), new PartitionKey(lockRecord.getLock_name()), patchOperations, getCosmosPatchItemRequestOptions(lockRecord.get_etag()), CosmosLockRecord.class).getItem();
+        if(lockRecord.getOwner() != pid){
+            LOGGER.warn("Current process is not owning lock {}, unlock is not allowed", lockRecord.getLock_name());
+        }
+        CosmosPatchOperations patchOperations = CosmosPatchOperations.create().set("/isAquired", false).set("/owner", null);
+        container.patchItem(lockRecord.getId(), new PartitionKey(lockRecord.getLock_name()), patchOperations, getCosmosPatchItemRequestOptions(lockRecord.get_etag()), CosmosLockRecord.class);
+        lockRecord = container.readItem(lockRecord.getId(), new PartitionKey(lockRecord.getLock_name()), readRequestOptions, CosmosLockRecord.class).getItem();
     }
 
     @Override
