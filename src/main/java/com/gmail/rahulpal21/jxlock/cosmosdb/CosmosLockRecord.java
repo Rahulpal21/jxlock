@@ -4,6 +4,10 @@ import lombok.Data;
 
 import java.util.Date;
 
+/**
+ * @author Rahul Pal
+ *
+ */
 @Data
 public class CosmosLockRecord {
     private String id;

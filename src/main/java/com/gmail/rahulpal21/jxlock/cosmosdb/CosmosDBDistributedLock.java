@@ -13,6 +13,10 @@ import java.util.Optional;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.Condition;
 
+/**
+ * @author Rahul Pal
+ *
+ */
 public class CosmosDBDistributedLock extends DistributedLock {
     private static final Logger LOGGER = LoggerFactory.getLogger(CosmosDBDistributedLock.class);
     private static final String NOT_IMPLEMENTED_MESSAGE = "Method not implemented";
