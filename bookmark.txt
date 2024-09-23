@@ -1,0 +1,2 @@
+resolve cosmosdb emulator certificate issue (done)
+resolve lock.lock failing in test
